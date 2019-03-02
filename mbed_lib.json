@@ -1,0 +1,13 @@
+{
+    "name": "iothub-client",
+    "config": {
+        "client-keepalive-timeout": {
+            "help": "Keep alive timeout used for connection and priodic pings where needed",
+            "value": "240"
+        },
+        "sas-default_ttl-sec": {
+            "help": "The detault Time-To-Live (TTL) for generated tokens",
+            "value": "3600"
+        }
+    }
+}
