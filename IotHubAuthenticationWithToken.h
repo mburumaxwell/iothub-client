@@ -4,15 +4,10 @@
 #include "IotHubAuthenticationMethod.h"
 #include "rtos/Mutex.h"
 
-// default TLL if not specified
-#ifndef MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC
-#define MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC	(3600)
-#endif
-
 class IotHubAuthenticationWithToken : public IotHubAuthenticationMethod {
 public:
-	IotHubAuthenticationWithToken(char *hostname = NULL, char *device_id = NULL, uint32_t ttl_sec = MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC);
-	IotHubAuthenticationWithToken(IotHubConnectionString *cs, uint32_t ttl_sec = MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC);
+	IotHubAuthenticationWithToken(char *hostname = NULL, char *device_id = NULL, uint32_t ttl_sec = MBED_CONF_IOTHUB_CLIENT_SAS_DEFAULT_TTL_SEC);
+	IotHubAuthenticationWithToken(IotHubConnectionString *cs, uint32_t ttl_sec = MBED_CONF_IOTHUB_CLIENT_SAS_DEFAULT_TTL_SEC);
 	~IotHubAuthenticationWithToken();
 
 	virtual iothub_authentication_type_t get_type() = 0;

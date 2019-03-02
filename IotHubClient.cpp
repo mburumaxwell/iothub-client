@@ -3,11 +3,6 @@
 #include "IotHubAuthenticationWithX509Certificate.h"
 #include "mbed_trace.h"
 
-// default keep alive timeout if not specified
-#ifndef MBED_CONF_IOTHUB_CLIENT_KEEPALIVE_TIMEOUT
-#define MBED_CONF_IOTHUB_CLIENT_KEEPALIVE_TIMEOUT		(100)
-#endif
-
 #define IOTHUB_CLIENT_PING_THRESHOLD					(MBED_CONF_IOTHUB_CLIENT_KEEPALIVE_TIMEOUT * 0.8f)
 
 #define TRACE_GROUP										"IOTHUB_CLIENT"

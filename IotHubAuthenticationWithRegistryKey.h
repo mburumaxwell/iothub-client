@@ -5,8 +5,8 @@
 
 class IotHubAuthenticationWithRegistryKey : public IotHubAuthenticationWithToken {
 public:
-	IotHubAuthenticationWithRegistryKey(char *hostname = NULL, char *device_id = NULL, char *key = NULL, uint32_t ttl_sec = MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC);
-	IotHubAuthenticationWithRegistryKey(IotHubConnectionString *cs, uint32_t ttl_sec = MBED_CONF_IOTHUB_SAS_DEFAULT_TTL_SEC);
+	IotHubAuthenticationWithRegistryKey(char *hostname = NULL, char *device_id = NULL, char *key = NULL, uint32_t ttl_sec = MBED_CONF_IOTHUB_CLIENT_SAS_DEFAULT_TTL_SEC);
+	IotHubAuthenticationWithRegistryKey(IotHubConnectionString *cs, uint32_t ttl_sec = MBED_CONF_IOTHUB_CLIENT_SAS_DEFAULT_TTL_SEC);
 	
 	iothub_authentication_type_t get_type();
 	void populate_from(IotHubConnectionString *cs);
