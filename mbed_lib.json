@@ -3,11 +3,19 @@
     "config": {
         "keepalive-timeout": {
             "help": "Keep alive timeout (in seconds) used for connection and periodic pings where needed",
-            "value": "240"
+            "value": "300"
         },
         "sas-default-ttl-sec": {
             "help": "The default Time-To-Live (TTL) for generated tokens in seconds",
             "value": "3600"
+        },
+        "twins-enable": {
+            "help": "Defines whether twins operations are enabled or not",
+            "value": true
+        },
+        "methods-enable": {
+            "help": "Defines whether direct methods are enabled or not",
+            "value": false
         },
         "max-method-handlers": {
             "help": "The maximum number of method handlers to keep reference to",

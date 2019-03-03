@@ -51,6 +51,7 @@ typedef struct {
 	iothub_raw_body_t body;
 } iothub_message_t;
 
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 typedef struct {
 	long version;
 	iothub_raw_body_t body;
@@ -59,7 +60,9 @@ typedef struct {
 typedef struct {
 	iothub_raw_body_t body;
 } iothub_twin_reported_property_update_t;
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
 
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 typedef struct {
 	char* method_name;
 	size_t method_name_length;
@@ -78,7 +81,7 @@ typedef struct {
 //#define METHOD_RESPOSE_STATUS_CODE_BAD_REQUEST				(400)
 //#define METHOD_RESPOSE_STATUS_CODE_USER_CODE_EXCEPTION		(500)
 #define METHOD_RESPOSE_STATUS_CODE_METHOD_NOT_IMPLEMENTED	(501)
-
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 
 #ifdef __cplusplus
 }

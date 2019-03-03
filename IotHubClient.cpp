@@ -13,14 +13,20 @@
 #define IOTHUB_CLIENT_TOPIC_D2C_FORMAT						"devices/%s/messages/events/" // devices/{device_id}/messages/events/
 #define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX				"devices/%s/messages/devicebound/"
 #define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_FILTER				"devices/%s/messages/devicebound/#" // devices/{device_id}/messages/devicebound/{property_bag}
+
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 #define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_PREFIX		"$iothub/twin/PATCH/properties/desired/"
 #define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_FILTER		"$iothub/twin/PATCH/properties/desired/#" // $iothub/twin/PATCH/properties/desired/?$version={new version}
 #define IOTHUB_CLIENT_TOPIC_REPORTED_PROPS_FORMAT			"$iothub/twin/PATCH/properties/reported/?$rid=%d" // $iothub/twin/PATCH/properties/reported/?$rid={0}
 #define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX		"$iothub/twin/res/"
 #define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER		"$iothub/twin/res/#" // $iothub/twin/res/{status}/?$rid={request id}
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
+
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 #define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX		"$iothub/methods/POST"
 #define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER		"$iothub/methods/POST/#" //$iothub/methods/POST/{method name}/?$rid={request id}
 #define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_RESPONSE_FORMAT	"$iothub/methods/res/%d/?$rid=%s" // $iothub/methods/res/{status}/?$rid={request id}
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 
 #if MBED_CONF_MBED_TRACE_ENABLE
 static const char * const mqtt_connect_returncode_str[15] =
@@ -61,7 +67,9 @@ IotHubClient::IotHubClient(IotHubConnectionString *cs, IotHubAuthenticationMetho
 	, on_events_to_process_cb(NULL)
 	, on_keep_alive_required_cb(NULL)
 	, on_message_received_cb(NULL)
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 	, on_desired_property_updated_cb(NULL)
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
 	, on_connection_status_changed_cb(NULL)
 	, connection_status(IOTHUB_CONNECTION_STATUS_DISCONNECTED)
 	, packet_id(0)
@@ -76,19 +84,21 @@ IotHubClient::IotHubClient(IotHubConnectionString *cs, IotHubAuthenticationMetho
 	len++; // allow for NULL character at the end
 	
 	// make the c2d topic prefix
-	c2b_topic_prefix = (char *)malloc(len);
-	len = snprintf(c2b_topic_prefix, len, IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX, connection_string->get_device_id());
+	c2d_topic_prefix = (char *)malloc(len);
+	len = snprintf(c2d_topic_prefix, len, IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX, connection_string->get_device_id());
 	
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 	// clean the method handlers
 	memset(method_handlers, 0, sizeof(method_handlers));
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 }
 
 IotHubClient::~IotHubClient()
 {
-	if (c2b_topic_prefix)
+	if (c2d_topic_prefix)
 	{
-		delete[] c2b_topic_prefix;
-		c2b_topic_prefix = NULL;
+		delete[] c2d_topic_prefix;
+		c2d_topic_prefix = NULL;
 	}
 }
 
@@ -202,6 +212,7 @@ nsapi_error_t IotHubClient::send_events(const iothub_message_t* messages, const 
 	return ret;
 }
 
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 nsapi_error_t IotHubClient::send_twin_patch(const iothub_twin_reported_property_update_t *patch)
 {
 	// determine amount of memory required for the topic
@@ -229,7 +240,9 @@ nsapi_error_t IotHubClient::send_twin_patch(const iothub_twin_reported_property_
 	free(topic);
 	return ret;
 }
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
 
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 nsapi_error_t IotHubClient::send_method_response(const iothub_direct_method_response_t* response)
 {
 	// determine amount of memory required for the topic
@@ -256,6 +269,7 @@ nsapi_error_t IotHubClient::send_method_response(const iothub_direct_method_resp
 	free(topic);
 	return ret;
 }
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 
 nsapi_error_t IotHubClient::process_events()
 {
@@ -295,11 +309,14 @@ void IotHubClient::on_message_received(Callback<void(IotHubClient*, iothub_messa
 	on_message_received_cb = cb;
 }
 
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 void IotHubClient::on_desired_property_updated(Callback<void(IotHubClient*, iothub_twin_desired_property_update_t*)> cb)
 {
 	on_desired_property_updated_cb = cb;
 }
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
 
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 void IotHubClient::set_method_handler(const char *name, Callback<void(IotHubClient*, iothub_direct_method_request_t*)> cb)
 {
 	MBED_ASSERT(name != NULL);
@@ -352,10 +369,8 @@ void IotHubClient::set_method_handler(const char *name, Callback<void(IotHubClie
 				name);
 		}
 	}
-	
-
-//	on_direct_method_invoked_cb = cb;
 }
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 
 void IotHubClient::on_connection_status_changed(Callback<void(IotHubClient*, iothub_connection_status_t, iothub_connection_status_change_reason_t)> cb)
 {
@@ -498,6 +513,7 @@ void IotHubClient::handle_packet_recevied_connack(mqtt_packet_connect_ack_t *pac
 	inner.subscribe(sub_topic, pid);
 	delete[] sub_topic;
 				
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 	// subscribe for desired property updates
 	pid = get_next_packet_id();
 	tr_debug("Subscribing to Twin updates on %s with Id:%d", IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_FILTER, pid);
@@ -507,11 +523,14 @@ void IotHubClient::handle_packet_recevied_connack(mqtt_packet_connect_ack_t *pac
 	pid = get_next_packet_id();
 	tr_debug("Subscribing to Twin responses on %s with Id:%d", IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER, pid);
 	inner.subscribe(IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER, pid);
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
 				
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 	// subscribe for direct methods
 	pid = get_next_packet_id();
 	tr_debug("Subscribing to Direct Methods on %s with Id:%d", IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER, pid);
 	inner.subscribe(IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER, pid);
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 	
 	// update connection status and change reason
 	set_connection_status(IOTHUB_CONNECTION_STATUS_CONNECTED, IOTHUB_CONNECTION_STATUS_CHANGE_REASON_CONNECTION_OK);
@@ -537,7 +556,7 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 	}
 			
 	// check if the packet is a C2D
-	if(strncmp(packet->topic, c2b_topic_prefix, strlen(c2b_topic_prefix)) == 0 && on_message_received_cb)
+	if(strncmp(packet->topic, c2d_topic_prefix, strlen(c2d_topic_prefix)) == 0 && on_message_received_cb)
 	{
 		tr_debug("Received event (C2D)");
 
@@ -558,6 +577,7 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 		// invoke message received callback
 		on_message_received_cb(this, &msg);
 	}
+#if MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE
 	// check if the packet is a desired property update
 	else if(strncmp(packet->topic, IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_PREFIX, strlen(IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_PREFIX)) == 0
 		&& on_desired_property_updated_cb)
@@ -577,8 +597,7 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 		on_desired_property_updated_cb(this, &upd);
 	}
 	// check if the packet is a twin update/get response
-	else if(strncmp(packet->topic, IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX, strlen(IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX)) == 0
-		&& on_desired_property_updated_cb)
+	else if(strncmp(packet->topic, IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX, strlen(IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX)) == 0)
 	{
 		tr_debug("Received twin update/get response");
 
@@ -586,6 +605,8 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 		// in this case an example topic is $iothub/twin/res/204/?$rid=1&$version=2
 		// the payload length is not zero when it is a response to a GET request, the payload contains the whole twin (reported+desired properties)
 	}
+#endif /* MBED_CONF_IOTHUB_CLIENT_TWINS_ENABLE */
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 	// check if the packet is a direct method invocation
 	else if(strncmp(packet->topic, IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX, strlen(IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX)) == 0)
 	{
@@ -623,6 +644,7 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 		free(dmr.method_name);
 		free(dmr.rid);
 	}
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
 }
 
 void IotHubClient::set_connection_status(iothub_connection_status_t status, iothub_connection_status_change_reason_t reason)
@@ -640,6 +662,7 @@ void IotHubClient::set_connection_status(iothub_connection_status_t status, ioth
 	}	
 }
 
+#if MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE
 void IotHubClient::handle_direct_method(iothub_direct_method_request_t *request)
 {
 	tr_debug("Handling direct method with name \'%.*s\' and request id \'%.*s\'",
@@ -681,3 +704,4 @@ void IotHubClient::handle_direct_method(iothub_direct_method_request_t *request)
 	// at this point, we found the handler so we can invoke its callback
 	handler->cb(this, request);
 }
+#endif /* MBED_CONF_IOTHUB_CLIENT_METHODS_ENABLE */
