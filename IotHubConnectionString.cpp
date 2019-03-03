@@ -23,7 +23,7 @@
 #define PARSE_PROPERTY_NAME_SAS			PROPERTY_NAME_SAS KEY_VALUE_PAIR_SETTER
 #define PARSE_PROPERTY_NAME_X509CERT	PROPERTY_NAME_X509CERT KEY_VALUE_PAIR_SETTER
 
-static char* strstr_to_after(const char *s1, const char *s2)
+static char* strstr_to_after(char *s1, const char *s2)
 {
 	char *p1 = NULL;
 	if ((p1 = strstr(s1, s2))) return p1 + strlen(s2);
@@ -153,6 +153,11 @@ bool IotHubConnectionString::is_valid()
 	}
 	
 	return true;
+}
+
+bool IotHubConnectionString::is_module()
+{
+	return module_id != NULL && (strlen(module_id) > 0);
 }
 
 IotHubConnectionString *IotHubConnectionString::reset()

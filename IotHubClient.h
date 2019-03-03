@@ -19,6 +19,7 @@ public:
 	nsapi_error_t send_event(const iothub_message_t *message);
 	nsapi_error_t send_events(const iothub_message_t *messages, const size_t count);
 	nsapi_error_t send_twin_patch(const iothub_twin_reported_property_update_t *patch);
+	nsapi_error_t send_method_response(const iothub_direct_method_response_t* response);
 	
 	nsapi_error_t process_events();
 	void on_events_to_process(Callback<void(IotHubClient*)> cb);
@@ -28,6 +29,7 @@ public:
 	
 	void on_message_received(Callback<void(IotHubClient*, iothub_message_t*)> cb);
 	void on_desired_property_updated(Callback<void(IotHubClient*, iothub_twin_desired_property_update_t*)> cb);
+	void set_method_handler(const char *name, Callback<void(IotHubClient*, iothub_direct_method_request_t*)> cb);
 	
 	void on_connection_status_changed(Callback<void(IotHubClient*, iothub_connection_status_t, iothub_connection_status_change_reason_t)> cb);
 	
@@ -42,6 +44,7 @@ private:
 	void handle_packet_recevied_connack(mqtt_packet_connect_ack_t *packet);
 	void handle_packet_recevied_publish(mqtt_packet_publish_t *packet);
 	void set_connection_status(iothub_connection_status_t status, iothub_connection_status_change_reason_t reason);
+	void handle_direct_method(iothub_direct_method_request_t *request);
 
 private:
 	TLSMqttClient inner;
@@ -56,9 +59,17 @@ private:
 	Callback<void(IotHubClient*, iothub_connection_status_t, iothub_connection_status_change_reason_t)> on_connection_status_changed_cb;
 	
 private:
+	
+	typedef struct {
+		const char* name;
+		Callback<void(IotHubClient*, iothub_direct_method_request_t*)> cb;
+	} iothub_method_handler_t;
+	
+private:
 	iothub_connection_status_t connection_status;
 	uint16_t packet_id, rid;
 	char *c2b_topic_prefix;
+	iothub_method_handler_t method_handlers[MBED_CONF_IOTHUB_CLIENT_MAX_METHOD_HANDLERS];
 };
 
 #endif /* __IOT_HUB_CLIENT_H */

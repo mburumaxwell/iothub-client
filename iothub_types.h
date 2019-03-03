@@ -41,26 +41,44 @@ typedef struct {
 } iothub_message_property_t;
 
 typedef struct {
-	size_t	length;
-	void*	content;
-} iothub_message_body_t;
+	void*	p;
+	size_t	len;
+} iothub_raw_body_t;
 
 typedef struct {
 	iothub_message_property_t* properties;
 	size_t	properties_count;
-	iothub_message_body_t body;
+	iothub_raw_body_t body;
 } iothub_message_t;
 
 typedef struct {
 	long version;
-	size_t	length;
-	void*	content;
+	iothub_raw_body_t body;
 } iothub_twin_desired_property_update_t;
 
 typedef struct {
-	size_t	length;
-	void*	content;
+	iothub_raw_body_t body;
 } iothub_twin_reported_property_update_t;
+
+typedef struct {
+	char* method_name;
+	size_t method_name_length;
+	char* rid;
+	size_t rid_length;
+	iothub_raw_body_t body;
+} iothub_direct_method_request_t;
+
+typedef struct {
+	uint16_t status;
+	char* rid;
+	size_t rid_length;
+	iothub_raw_body_t body;
+} iothub_direct_method_response_t;
+	
+//#define METHOD_RESPOSE_STATUS_CODE_BAD_REQUEST				(400)
+//#define METHOD_RESPOSE_STATUS_CODE_USER_CODE_EXCEPTION		(500)
+#define METHOD_RESPOSE_STATUS_CODE_METHOD_NOT_IMPLEMENTED	(501)
+
 
 #ifdef __cplusplus
 }

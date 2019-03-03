@@ -3,21 +3,24 @@
 #include "IotHubAuthenticationWithX509Certificate.h"
 #include "mbed_trace.h"
 
-#define IOTHUB_CLIENT_PING_THRESHOLD					(MBED_CONF_IOTHUB_CLIENT_KEEPALIVE_TIMEOUT * 0.8f)
+#define IOTHUB_CLIENT_PING_THRESHOLD						(MBED_CONF_IOTHUB_CLIENT_KEEPALIVE_TIMEOUT * 0.8f)
 
-#define TRACE_GROUP										"IOTHUB_CLIENT"
+#define TRACE_GROUP											"IOTHUB_CLIENT"
 
 // Topic formats, filters and prefixes
-#define IOTHUB_CLIENT_PORT								(8883)
-#define IOTHUB_CLIENT_USERNAME_FORMAT					"%s/%s/api-version=2016-11-14" // {hostname}/{device_id}/api-version={api_version}
-#define IOTHUB_CLIENT_TOPIC_D2C_FORMAT					"devices/%s/messages/events/" // devices/{device_id}/messages/events/
-#define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX			"devices/%s/messages/devicebound/"
-#define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_FILTER			"devices/%s/messages/devicebound/#" // devices/{device_id}/messages/devicebound/{property_bag}
-#define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_PREFIX	"$iothub/twin/PATCH/properties/desired/"
-#define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_FILTER	"$iothub/twin/PATCH/properties/desired/#" // $iothub/twin/PATCH/properties/desired/?$version={new version}
-#define IOTHUB_CLIENT_TOPIC_REPORTED_PROPS_FORMAT		"$iothub/twin/PATCH/properties/reported/?$rid=%d" // $iothub/twin/PATCH/properties/reported/?$rid={0}
-#define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX	"$iothub/twin/res/"
-#define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER	"$iothub/twin/res/#" // $iothub/twin/res/{status}/?$rid={request id}
+#define IOTHUB_CLIENT_PORT									(8883)
+#define IOTHUB_CLIENT_USERNAME_FORMAT						"%s/%s/api-version=2016-11-14" // {hostname}/{device_id}/api-version={api_version}
+#define IOTHUB_CLIENT_TOPIC_D2C_FORMAT						"devices/%s/messages/events/" // devices/{device_id}/messages/events/
+#define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX				"devices/%s/messages/devicebound/"
+#define IOTHUB_CLIENT_TOPIC_C2D_FORMAT_FILTER				"devices/%s/messages/devicebound/#" // devices/{device_id}/messages/devicebound/{property_bag}
+#define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_PREFIX		"$iothub/twin/PATCH/properties/desired/"
+#define IOTHUB_CLIENT_TOPIC_DESIRED_PROPS_FORMAT_FILTER		"$iothub/twin/PATCH/properties/desired/#" // $iothub/twin/PATCH/properties/desired/?$version={new version}
+#define IOTHUB_CLIENT_TOPIC_REPORTED_PROPS_FORMAT			"$iothub/twin/PATCH/properties/reported/?$rid=%d" // $iothub/twin/PATCH/properties/reported/?$rid={0}
+#define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_PREFIX		"$iothub/twin/res/"
+#define IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER		"$iothub/twin/res/#" // $iothub/twin/res/{status}/?$rid={request id}
+#define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX		"$iothub/methods/POST"
+#define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER		"$iothub/methods/POST/#" //$iothub/methods/POST/{method name}/?$rid={request id}
+#define IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_RESPONSE_FORMAT	"$iothub/methods/res/%d/?$rid=%s" // $iothub/methods/res/{status}/?$rid={request id}
 
 #if MBED_CONF_MBED_TRACE_ENABLE
 static const char * const mqtt_connect_returncode_str[15] =
@@ -75,6 +78,9 @@ IotHubClient::IotHubClient(IotHubConnectionString *cs, IotHubAuthenticationMetho
 	// make the c2d topic prefix
 	c2b_topic_prefix = (char *)malloc(len);
 	len = snprintf(c2b_topic_prefix, len, IOTHUB_CLIENT_TOPIC_C2D_FORMAT_PREFIX, connection_string->get_device_id());
+	
+	// clean the method handlers
+	memset(method_handlers, 0, sizeof(method_handlers));
 }
 
 IotHubClient::~IotHubClient()
@@ -160,7 +166,7 @@ nsapi_error_t IotHubClient::send_event(const iothub_message_t* message)
 	topic_sz++; // allow for NULL character at the end
 	
 	// make the topic
-	char *topic = (char *)malloc(topic_sz); // TODO: check for NULL
+	char *topic = (char *)malloc(topic_sz);
 	if(topic == NULL) return NSAPI_ERROR_NO_MEMORY;
 	memset(topic, 0, topic_sz);
 	topic_sz = snprintf(topic, topic_sz, IOTHUB_CLIENT_TOPIC_D2C_FORMAT, connection_string->get_device_id());
@@ -168,7 +174,7 @@ nsapi_error_t IotHubClient::send_event(const iothub_message_t* message)
 	// send publish packet
 	uint16_t pid = get_next_packet_id();
 	tr_debug("Publishing D2C on %.*s with Id:%d", topic_sz, topic, pid);
-	nsapi_error_t ret = inner.publish(topic, pid, (const uint8_t *)message->body.content, message->body.length);
+	nsapi_error_t ret = inner.publish(topic, pid, (const uint8_t *)message->body.p, message->body.len);
 	if (ret <= 0)
 	{
 		tr_error("inner.publish() failed ret = %d", ret);
@@ -204,7 +210,7 @@ nsapi_error_t IotHubClient::send_twin_patch(const iothub_twin_reported_property_
 	topic_sz++; // allow for NULL character at the end
 	
 	// make the topic
-	char *topic = (char *)malloc(topic_sz); // TODO: check for NULL
+	char *topic = (char *)malloc(topic_sz);
 	if(topic == NULL) return NSAPI_ERROR_NO_MEMORY;
 	memset(topic, 0, topic_sz);
 	topic_sz = snprintf(topic, topic_sz, IOTHUB_CLIENT_TOPIC_REPORTED_PROPS_FORMAT, rid);
@@ -212,7 +218,34 @@ nsapi_error_t IotHubClient::send_twin_patch(const iothub_twin_reported_property_
 	// send publish packet
 	uint16_t pid = get_next_packet_id();
 	tr_debug("Publishing Twin patch on %.*s with Id:%d", topic_sz, topic, pid);
-	nsapi_error_t ret = inner.publish(topic, pid, (const uint8_t *)patch->content, patch->length);
+	nsapi_error_t ret = inner.publish(topic, pid, (const uint8_t *)patch->body.p, patch->body.len);
+	if (ret <= 0)
+	{
+		tr_error("inner.publish() failed ret = %d", ret);
+		free(topic);
+		return ret;
+	}
+	
+	free(topic);
+	return ret;
+}
+
+nsapi_error_t IotHubClient::send_method_response(const iothub_direct_method_response_t* response)
+{
+	// determine amount of memory required for the topic
+	size_t topic_sz = snprintf(NULL, 0, IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_RESPONSE_FORMAT, response->status, response->rid);
+	topic_sz++; // allow for NULL character at the end
+	
+	// make the topic
+	char *topic = (char *)malloc(topic_sz);
+	if(topic == NULL) return NSAPI_ERROR_NO_MEMORY;
+	memset(topic, 0, topic_sz);
+	topic_sz = snprintf(topic, topic_sz, IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_RESPONSE_FORMAT, response->status, response->rid);
+
+	// send publish packet
+	uint16_t pid = get_next_packet_id();
+	tr_debug("Publishing Direct method response on %.*s with Id:%d", topic_sz, topic, pid);
+	nsapi_error_t ret = inner.publish(topic, pid, (const uint8_t *)response->body.p, response->body.len);
 	if (ret <= 0)
 	{
 		tr_error("inner.publish() failed ret = %d", ret);
@@ -265,6 +298,63 @@ void IotHubClient::on_message_received(Callback<void(IotHubClient*, iothub_messa
 void IotHubClient::on_desired_property_updated(Callback<void(IotHubClient*, iothub_twin_desired_property_update_t*)> cb)
 {
 	on_desired_property_updated_cb = cb;
+}
+
+void IotHubClient::set_method_handler(const char *name, Callback<void(IotHubClient*, iothub_direct_method_request_t*)> cb)
+{
+	MBED_ASSERT(name != NULL);
+	
+	// find an existing handler by name
+	iothub_method_handler_t *handler = NULL;
+	for (uint8_t i = 0;i < MBED_CONF_IOTHUB_CLIENT_MAX_METHOD_HANDLERS;i++)
+	{
+		// check if the handler matches
+		if(method_handlers[i].name != NULL && strncmp(method_handlers[i].name, name, strlen(name)) == 0)
+		{
+			handler = &(method_handlers[i]);  // set pointer to handler
+			break;		  // exit search loop
+		}
+	}
+	
+	// if there is one existing then we are either updating or removing
+	if(handler != NULL)
+	{
+		// if the callback is not NULL then we are updating, otherwise removing
+		if(cb) handler->cb = cb; // update
+		else memset(handler, 0, sizeof(iothub_method_handler_t)); // remove
+		tr_debug("Method handler for %s has been %s", name, cb ? "updated" : "removed");
+		return; // nothing else let to do
+	}
+	
+	
+	if(cb)
+	{
+		// at this point, we are definitely adding a handler so we find an empty slot to use
+		handler = NULL;
+		for (uint8_t i = 0;i < MBED_CONF_IOTHUB_CLIENT_MAX_METHOD_HANDLERS;i++)
+		{
+			// if the name has not been set we can use it
+			if(method_handlers[i].name == NULL)
+			{
+				handler = &(method_handlers[i]);  // set pointer to handler
+				break;		  // exit search loop
+			}
+		}
+		
+		if (handler != NULL)
+		{
+			handler->name = name;
+			handler->cb = cb;
+		}
+		else
+		{
+			tr_warn("Unable to find empty handler slot for method \'%s\'. Consider increasing the number of handlers in your configuration.",
+				name);
+		}
+	}
+	
+
+//	on_direct_method_invoked_cb = cb;
 }
 
 void IotHubClient::on_connection_status_changed(Callback<void(IotHubClient*, iothub_connection_status_t, iothub_connection_status_change_reason_t)> cb)
@@ -418,7 +508,10 @@ void IotHubClient::handle_packet_recevied_connack(mqtt_packet_connect_ack_t *pac
 	tr_debug("Subscribing to Twin responses on %s with Id:%d", IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER, pid);
 	inner.subscribe(IOTHUB_CLIENT_TOPIC_TWIN_RESPONSE_FORMAT_FILTER, pid);
 				
-	// TODO: subscribe to topics for direct methods
+	// subscribe for direct methods
+	pid = get_next_packet_id();
+	tr_debug("Subscribing to Direct Methods on %s with Id:%d", IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER, pid);
+	inner.subscribe(IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_FILTER, pid);
 	
 	// update connection status and change reason
 	set_connection_status(IOTHUB_CONNECTION_STATUS_CONNECTED, IOTHUB_CONNECTION_STATUS_CHANGE_REASON_CONNECTION_OK);
@@ -450,8 +543,8 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 
 		iothub_message_t msg;
 		memset(&msg, 0, sizeof(iothub_message_t));
-		msg.body.content = packet->payload.content;
-		msg.body.length = packet->payload.length;
+		msg.body.p = packet->payload.content;
+		msg.body.len = packet->payload.length;
 		/*
 		 * TODO: parse properties from the topic
 		 * Example topic:
@@ -473,8 +566,8 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 
 		iothub_twin_desired_property_update_t upd;
 		memset(&upd, 0, sizeof(iothub_twin_desired_property_update_t));
-		upd.content = packet->payload.content;
-		upd.length = packet->payload.length;
+		upd.body.p = packet->payload.content;
+		upd.body.len = packet->payload.length;
 		/*
 		 * TODO: parse version from topic (i.e. its a property)
 		 * Example topic: $iothub/twin/PATCH/properties/desired/?$version=3
@@ -489,12 +582,47 @@ void IotHubClient::handle_packet_recevied_publish(mqtt_packet_publish_t *packet)
 	{
 		tr_debug("Received twin update/get response");
 
-		// the payload length is 0 when it s a response to and update in reported properties
+		// the payload length is 0 when it is a response to and update in reported properties
 		// in this case an example topic is $iothub/twin/res/204/?$rid=1&$version=2
 		// the payload length is not zero when it is a response to a GET request, the payload contains the whole twin (reported+desired properties)
 	}
+	// check if the packet is a direct method invocation
+	else if(strncmp(packet->topic, IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX, strlen(IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX)) == 0)
+	{
+		tr_debug("Received direct method invocation");
 
-	// TODO: check topic for direct method
+		// IoT Hub sends method requests to the topic $iothub/methods/POST/{method name}/?$rid={request id},
+		// with either a valid JSON or an empty body.
+		
+		iothub_direct_method_request_t dmr;
+		memset(&dmr, 0, sizeof(iothub_direct_method_request_t));
+		dmr.body.p = packet->payload.content;
+		dmr.body.len = packet->payload.length;
+		
+		// extract the method name
+		char *start = strstr(packet->topic, IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX);
+		start += strlen(IOTHUB_CLIENT_TOPIC_DIRECT_METHOD_FORMAT_PREFIX) + 1;
+		char *end = strstr(start, "/");
+		dmr.method_name_length = end - start;
+		dmr.method_name = (char *)malloc(dmr.method_name_length + 1); // allow for NULL character at the end
+		memset(dmr.method_name, 0, dmr.method_name_length + 1);
+		memcpy(dmr.method_name, start, dmr.method_name_length);
+		
+		// extract the request id (rid)
+		start = strstr(packet->topic, "rid=") + 4;
+		end = packet->topic + packet->topic_len;
+		dmr.rid_length = end - start;
+		dmr.rid = (char *)malloc(dmr.rid_length + 1); // allow for NULL character at the end
+		memset(dmr.rid, 0, dmr.rid_length + 1);
+		memcpy(dmr.rid, start, dmr.rid_length);
+
+		// invoke direct method callback
+		handle_direct_method(&dmr);
+		
+		// free the resources allocated here
+		free(dmr.method_name);
+		free(dmr.rid);
+	}
 }
 
 void IotHubClient::set_connection_status(iothub_connection_status_t status, iothub_connection_status_change_reason_t reason)
@@ -510,4 +638,46 @@ void IotHubClient::set_connection_status(iothub_connection_status_t status, ioth
 	{
 		on_connection_status_changed_cb(this, connection_status, reason);
 	}	
+}
+
+void IotHubClient::handle_direct_method(iothub_direct_method_request_t *request)
+{
+	tr_debug("Handling direct method with name \'%.*s\' and request id \'%.*s\'",
+		request->method_name_length,
+		request->method_name,
+		request->rid_length,
+		request->rid);
+	
+	// find the handler for this method by name
+	iothub_method_handler_t *handler = NULL;
+	for (uint8_t i = 0;i < MBED_CONF_IOTHUB_CLIENT_MAX_METHOD_HANDLERS;i++)
+	{
+		// check if the handler matches
+		if(strncmp(method_handlers[i].name, request->method_name, request->method_name_length) == 0)
+		{
+			handler = &(method_handlers[i]); // set pointer to handler
+			break;		  // nothing more to do
+		}
+	}
+	
+	// if there is no handler then respond appropriately and immediately
+	if (handler == NULL || !handler->cb)
+	{
+		tr_warn("No method handler found for \'%.*s\' (or the callback was not specified). Returning %d",
+			request->method_name_length,
+			request->method_name,
+			METHOD_RESPOSE_STATUS_CODE_METHOD_NOT_IMPLEMENTED);
+		
+		// prepare the response
+		iothub_direct_method_response_t response;
+		memset(&response, 0, sizeof(iothub_direct_method_response_t));
+		response.rid = request->rid;
+		response.rid_length = request->rid_length;
+		response.status = METHOD_RESPOSE_STATUS_CODE_METHOD_NOT_IMPLEMENTED;
+		send_method_response(&response);
+		return;
+	}
+	
+	// at this point, we found the handler so we can invoke its callback
+	handler->cb(this, request);
 }

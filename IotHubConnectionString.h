@@ -20,6 +20,7 @@ public:
 	
 	size_t write(char *dest, size_t dlen);
 	bool is_valid();
+	bool is_module();
 	IotHubConnectionString *parse(char *cs);
 	IotHubConnectionString *reset();
 	
